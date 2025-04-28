@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>疯狂喷气背包游戏</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #a7d7f9;
+        }
+
+        #game-container {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            border: 5px solid #000;
+            background-color: #a7d7f9;
+            overflow: hidden;
+        }
+
+        #player {
+            position: absolute;
+            width: 50px;
+            height: 80px;
+            background-color: #ff6600;
+            border-radius: 20px;
+        }
+
+        .obstacle {
+            position: absolute;
+            width: 30px;
+            background-color: #008000;
+            bottom: 50px;
+        }
+
+        #ground {
+            position: absolute;
+            width: 100%;
+            height: 50px;
+            background-color: #8b4513;
+            bottom: 0;
+        }
+
+        #ceiling {
+            position: absolute;
+            width: 100%;
+            height: 50px;
+            background-color: #8b4513;
+            top: 0;
+        }
+
+        .spike {
+            position: absolute;
+            width: 0;
+            height: 0;
+            border-left: 15px solid transparent;
+            border-right: 15px solid transparent;
+        }
+
+        .spike-down {
+            border-bottom: 20px solid red;
+        }
+
+        .spike-up {
+            border-top: 20px solid red;
+        }
+
+        #score {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+        }
+
+        #restart-button {
+            position: absolute;
+            top: 60%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 10px 20px;
+            font-size: 18px;
+            display: none;
+        }
+
+        #final-score {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="game-container">
+        <div id="player"></div>
+        <div id="ground"></div>
+        <div id="ceiling"></div>
+        <div id="score">积分: 0</div>
+        <div id="final-score"></div>
+        <button id="restart-button" onclick="restartGame()">重新开始</button>
+    </div>
+    <script>
+        const gameContainer = document.getElementById('game-container');
+        const player = document.getElementById('player');
+        const scoreElement = document.getElementById('score');
+        const ground = document.getElementById('ground');
+        const ceiling = document.getElementById('ceiling');
+        const restartButton = document.getElementById('restart-button');
+        const finalScoreElement = document.getElementById('final-score');
+
+        let score = 0;
+        let playerY = (gameContainer.offsetHeight - ground.offsetHeight - player.offsetHeight) / 2;
+        let playerX = gameContainer.offsetWidth / 2 - player.offsetWidth / 2;
+        let playerSpeed = 5;
+        let obstacleSpeed = 3;
+        let obstacleInterval = 1500;
+        let obstacleTimer;
+        let scoreTimer;
+        let gravity = -1; // 调转重力方向
+        let fallSpeed = 0;
+        const maxFlightHeight = gameContainer.offsetHeight - ground.offsetHeight - player.offsetHeight;
+
+        function createSpikes() {
+            const spikeWidth = 30;
+            const numSpikes = Math.floor(gameContainer.offsetWidth / spikeWidth);
+            for (let i = 0; i < numSpikes; i++) {
+                const spikeDown = document.createElement('div');
+                spikeDown.classList.add('spike', 'spike-down');
+                spikeDown.style.left = i * spikeWidth + 'px';
+                spikeDown.style.bottom = ground.offsetHeight + 'px';
+                gameContainer.appendChild(spikeDown);
+
+                const spikeUp = document.createElement('div');
+                spikeUp.classList.add('spike', 'spike-up');
+                spikeUp.style.left = i * spikeWidth + 'px';
+                spikeUp.style.top = ceiling.offsetHeight + 'px';
+                gameContainer.appendChild(spikeUp);
+            }
+        }
+
+        function updateScore() {
+            score++;
+            scoreElement.textContent = `积分: ${score}`;
+
+            if (score % 60 === 0) {
+                playerSpeed *= 1.2;
+                obstacleSpeed *= 1.2;
+                obstacleInterval *= 0.8;
+                clearInterval(obstacleTimer);
+                obstacleTimer = setInterval(createObstacle, obstacleInterval);
+            }
+        }
+
+        function createObstacle() {
+            const obstacle = document.createElement('div');
+            obstacle.classList.add('obstacle');
+            obstacle.style.left = gameContainer.offsetWidth + 'px';
+
+            // 随机决定障碍物长度
+            const obstacleHeights = [100, 200];
+            const randomHeightIndex = Math.floor(Math.random() * obstacleHeights.length);
+            const obstacleHeight = obstacleHeights[randomHeightIndex];
+            obstacle.style.height = obstacleHeight + 'px';
+
+            // 随机决定障碍物出现的垂直位置
+            const minTop = 50;
+            const maxTop = gameContainer.offsetHeight - ground.offsetHeight - obstacleHeight;
+            const randomTop = Math.floor(Math.random() * (maxTop - minTop + 1)) + minTop;
+            obstacle.style.bottom = randomTop + 'px';
+
+            gameContainer.appendChild(obstacle);
+
+            const moveObstacle = () => {
+                const obstacleX = parseInt(obstacle.style.left);
+                obstacle.style.left = obstacleX - obstacleSpeed + 'px';
+
+                if (obstacleX < -obstacle.offsetWidth) {
+                    gameContainer.removeChild(obstacle);
+                }
+
+                const playerRect = player.getBoundingClientRect();
+                const obstacleRect = obstacle.getBoundingClientRect();
+
+                if (
+                    playerRect.left < obstacleRect.right &&
+                    playerRect.right > obstacleRect.left &&
+                    playerRect.bottom > obstacleRect.top &&
+                    playerRect.top < obstacleRect.bottom
+                ) {
+                    gameOver();
+                }
+            };
+
+            const obstacleMovement = setInterval(moveObstacle, 10);
+        }
+
+        function fly() {
+            fallSpeed = 15; // 调转飞行方向
+        }
+
+        function applyGravity() {
+            fallSpeed += gravity;
+            playerY += fallSpeed;
+
+            if (playerY < 0) {
+                gameOver();
+            }
+
+            if (playerY > maxFlightHeight) {
+                gameOver();
+            }
+
+            player.style.bottom = playerY + 'px';
+        }
+
+        function gameOver() {
+            clearInterval(scoreTimer);
+            clearInterval(obstacleTimer);
+            const allObstacles = document.querySelectorAll('.obstacle');
+            allObstacles.forEach(obstacle => gameContainer.removeChild(obstacle));
+            finalScoreElement.textContent = `你的最终分数: ${score}`;
+            finalScoreElement.style.display = 'block';
+            restartButton.style.display = 'block';
+        }
+
+        function restartGame() {
+            score = 0;
+            playerY = (gameContainer.offsetHeight - ground.offsetHeight - player.offsetHeight) / 2;
+            playerX = gameContainer.offsetWidth / 2 - player.offsetWidth / 2;
+            playerSpeed = 5;
+            obstacleSpeed = 3;
+            obstacleInterval = 1500;
+            fallSpeed = 0;
+            scoreElement.textContent = '积分: 0';
+            player.style.bottom = playerY + 'px';
+            player.style.left = playerX + 'px';
+            finalScoreElement.style.display = 'none';
+            restartButton.style.display = 'none';
+            scoreTimer = setInterval(updateScore, 1000);
+            obstacleTimer = setInterval(createObstacle, obstacleInterval);
+        }
+
+        document.addEventListener('click', fly);
+        setInterval(applyGravity, 30);
+
+        // 初始化角色位置
+        player.style.bottom = playerY + 'px';
+        player.style.left = playerX + 'px';
+
+        // 创建尖刺
+        createSpikes();
+
+        scoreTimer = setInterval(updateScore, 1000);
+        obstacleTimer = setInterval(createObstacle, obstacleInterval);
+    </script>
+</body>
+
+</html>
+    
